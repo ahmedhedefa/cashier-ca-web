@@ -16,7 +16,7 @@ DENOMS.forEach(d => d.enabled = true);    // all on by default
 const chipValues = [5, 10, 25, 100, 500]; // quick-add buttons (in cents)
 
 /* ---------- 2. Helpers (defined BEFORE we call them) --------------------- */
-// Format cents → “$X.XX” (locale Canadian English)
+// Format cents → “$X.XX”
 function fmt(cents) {
   return (cents / 100).toLocaleString(
     "en-CA",
@@ -24,7 +24,14 @@ function fmt(cents) {
   );
 }
 
-const roundToNickel = c => c - (c % 5);
+/* Nearest‑nickel rounding
+   1‑2 → down, 3‑4 → up, 6‑7 → down, 8‑9 → up
+*/
+const roundToNickel = cents => {
+  const r = cents % 5;             // remainder 0‥4
+  return r <= 2 ? cents - r        // 0‑2 → round down
+                : cents + (5 - r); // 3‑4 → round up
+};
 
 /* ---------- 3. DOM shortcuts -------------------------------------------- */
 const $ = id => document.getElementById(id);
@@ -37,7 +44,6 @@ const suggestCard = $("suggestCard");
 const suggestEl   = $("suggest");
 
 /* ---------- 4. Build UI: chips & toggles ------------------------------- */
-// Quick-add “+5¢ +10¢ +25¢ +$1 +$5”
 chipValues.forEach(c => {
   const span = document.createElement("span");
   span.className   = "chip";
@@ -49,7 +55,6 @@ chipValues.forEach(c => {
   $("chips").append(span);
 });
 
-// Enable / disable denominations
 DENOMS.forEach(d => {
   const lab = document.createElement("label");
   lab.innerHTML = `<input type="checkbox" checked> ${d.name}`;
