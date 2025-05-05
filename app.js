@@ -11,11 +11,11 @@ const DENOMS = [
   { name: "Dime (10¢)",    value:  10 },
   { name: "Nickel (5¢)",   value:   5 }
 ];
-DENOMS.forEach(d => d.enabled = true);    // all on by default
+DENOMS.forEach(d => d.enabled = true);
 
-const chipValues = [5, 10, 25, 100, 500]; // quick-add buttons (in cents)
+const chipValues = [5, 10, 25, 100, 500];   // quick‑add buttons (cents)
 
-/* ---------- 2. Helpers (defined BEFORE we call them) --------------------- */
+/* ---------- 2. Helpers ---------------------------------------------------- */
 // Format cents → “$X.XX”
 function fmt(cents) {
   return (cents / 100).toLocaleString(
@@ -24,16 +24,13 @@ function fmt(cents) {
   );
 }
 
-/* Nearest‑nickel rounding
-   1‑2 → down, 3‑4 → up, 6‑7 → down, 8‑9 → up
-*/
+// Nearest‑nickel rounding (1–2↓, 3–4↑, 6–7↓, 8–9↑)
 const roundToNickel = cents => {
-  const r = cents % 5;             // remainder 0‥4
-  return r <= 2 ? cents - r        // 0‑2 → round down
-                : cents + (5 - r); // 3‑4 → round up
+  const r = cents % 5;
+  return r <= 2 ? cents - r : cents + (5 - r);
 };
 
-/* ---------- 3. DOM shortcuts -------------------------------------------- */
+/* ---------- 3. DOM shortcuts --------------------------------------------- */
 const $ = id => document.getElementById(id);
 const dueEl       = $("due");
 const paidEl      = $("paid");
@@ -43,7 +40,7 @@ const brkTbl      = $("breakdown");
 const suggestCard = $("suggestCard");
 const suggestEl   = $("suggest");
 
-/* ---------- 4. Build UI: chips & toggles ------------------------------- */
+/* ---------- 4. Build UI: chips & toggles --------------------------------- */
 chipValues.forEach(c => {
   const span = document.createElement("span");
   span.className   = "chip";
@@ -62,62 +59,62 @@ DENOMS.forEach(d => {
   $("denoms").append(lab, document.createElement("br"));
 });
 
-/* ---------- 5. Core algorithms ----------------------------------------- */
+/* ---------- 5. Core algorithms ------------------------------------------- */
 function greedy(cents) {
-  const out = {};
-  const active = DENOMS.filter(d => d.enabled)
-                       .sort((a, b) => b.value - a.value);
+  const pieces = {};
+  const active = DENOMS.filter(d => d.enabled).sort((a,b)=>b.value-a.value);
   for (const d of active) {
     const n = Math.floor(cents / d.value);
-    if (n) { out[d.name] = n; cents -= n * d.value; }
+    if (n) { pieces[d.name] = n; cents -= n * d.value; }
   }
-  return [out, cents];               // cents leftover should be 0
+  return [pieces, cents];   // cents leftover should be 0
 }
 
-function bestTopUps(changeCents) {
-  const basePieces = Object.values(greedy(changeCents)[0])
-                            .reduce((a, b) => a + b, 0);
-  const res = [];
-  for (let extra = 5; extra <= 200; extra += 5) { // scan +$0.05 .. +$2.00
-    const pieces = Object.values(greedy(changeCents + extra)[0])
-                          .reduce((a, b) => a + b, 0);
-    if (pieces < basePieces) {
-      res.push(extra);
-      if (res.length === 2) break;   // keep at most two suggestions
+function bestTopUps(baseChangeCents) {
+  const baselinePieces = Object.values(greedy(baseChangeCents)[0])
+                                .reduce((a,b)=>a+b,0);
+  const results = [];
+  for (let extra = 5; extra <= 200; extra += 5) {      // scan extra nickels
+    const candidate = roundToNickel(baseChangeCents + extra);
+    const pieces = Object.values(greedy(candidate)[0]).reduce((a,b)=>a+b,0);
+    if (pieces < baselinePieces) {
+      results.push(extra);
+      if (results.length === 2) break;                 // max two suggestions
     }
   }
-  return res;
+  return results;
 }
 
-/* ---------- 6. Main compute() ------------------------------------------ */
+/* ---------- 6. Main compute ---------------------------------------------- */
 function compute() {
-  errEl.textContent = "";
+  errEl.textContent   = "";
   changeEl.textContent = "";
-  brkTbl.innerHTML = "";
-  suggestCard.hidden = true;
-  suggestEl.innerHTML = "";
+  brkTbl.innerHTML     = "";
+  suggestCard.hidden   = true;
+  suggestEl.innerHTML  = "";
 
-  const dueCents   = Math.round((+dueEl.value  || 0) * 100);
-  const paidCents  = Math.round((+paidEl.value || 0) * 100);
-  const roundedDue = roundToNickel(dueCents);
+  const dueCents  = Math.round((+dueEl.value  || 0) * 100);
+  const paidCents = Math.round((+paidEl.value || 0) * 100);
 
-  if (paidCents < roundedDue) {
+  if (paidCents < dueCents) {
     errEl.textContent = "Amount paid is insufficient.";
     return;
   }
 
-  const changeCents = paidCents - roundedDue;
-  changeEl.textContent = `Change Due  ${fmt(changeCents)}`;
+  const changeExact   = paidCents - dueCents;        // raw difference
+  const changeRounded = roundToNickel(changeExact);  // now apply nickel rule
+  changeEl.textContent = `Change Due  ${fmt(changeRounded)}`;
 
-  const [breakdown] = greedy(changeCents);
+  const [breakdown] = greedy(changeRounded);
   for (const [name, qty] of Object.entries(breakdown)) {
     const tr = brkTbl.insertRow();
     tr.insertCell().textContent = name;
     tr.insertCell().textContent = `× ${qty}`;
   }
 
-  if (Object.values(breakdown).reduce((a, b) => a + b, 0) > 1) {
-    const tips = bestTopUps(changeCents);
+  // Suggestions: add extra nickels BEFORE rounding to reduce coins
+  if (Object.values(breakdown).reduce((a,b)=>a+b,0) > 1) {
+    const tips = bestTopUps(changeExact);
     if (tips.length) {
       suggestCard.hidden = false;
       tips.forEach(extra => {
@@ -129,7 +126,7 @@ function compute() {
   }
 }
 
-/* ---------- 7. Hook inputs & first run --------------------------------- */
+/* ---------- 7. Hook inputs & initial render ------------------------------ */
 dueEl.oninput  = compute;
 paidEl.oninput = compute;
-compute();      // initial render
+compute();       // first run
